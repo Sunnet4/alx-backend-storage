@@ -1,54 +1,58 @@
 #!/usr/bin/env python3
-"""In this tasks, we will implement a get_page function
-(prototype: def get_page(url: str) -> str:). The core of
-the function is very simple. It uses the requests module
-to obtain the HTML content of a particular URL and returns it.
-
-Start in a new file named web.py and do not reuse the code
-written in exercise.py.
-
-Inside get_page track how many times a particular URL was
-accessed in the key "count:{url}" and cache the result with
-an expiration time of 10 seconds.
-
-Tip: Use http://slowwly.robertomurray.co.uk to simulate
-a slow response and test your caching."""
+"""
+web.py: Module for fetching HTML content from a URL and caching the results with a decorator.
+"""
 
 
-import redis
 import requests
+from datetime import datetime, timedelta
 from functools import wraps
 
-r = redis.Redis()
+def cache_decorator(func):
+    """
+    Decorator function for caching the results of a function with an expiration time.
 
+    Args:
+        func (callable): The function to be decorated.
 
-def url_access_count(method):
-    """decorator for get_page function"""
-    @wraps(method)
-    def wrapper(url):
-        """wrapper function"""
-        key = "cached:" + url
-        cached_value = r.get(key)
-        if cached_value:
-            return cached_value.decode("utf-8")
+    Returns:
+        callable: The decorated function.
+    """
+    cache = {}
 
-            # Get new content and update cache
-        key_count = "count:" + url
-        html_content = method(url)
+    @wraps(func)
+    def wrapper(url: str) -> str:
+        """
+        Wrapper function that checks the cache for the result and fetches it or updates
+        the cache based on the expiration time.
 
-        r.incr(key_count)
-        r.set(key, html_content, ex=10)
-        r.expire(key, 10)
-        return html_content
+        Args:
+            url (str): The URL to fetch content from.
+
+        Returns:
+            str: The HTML content of the URL.
+        """
+        key = f"count:{url}"
+        if key in cache and cache[key]['expiration'] > datetime.now():
+            cache[key]['count'] += 1
+            return cache[key]['content']
+        else:
+            content = func(url)
+            cache[key] = {'content': content, 'expiration': datetime.now() + timedelta(seconds=10), 'count': 1}
+            return content
+
     return wrapper
 
-
-@url_access_count
+@cache_decorator
 def get_page(url: str) -> str:
-    """obtain the HTML content of a particular"""
-    results = requests.get(url)
-    return results.text
+    """
+    Fetches the HTML content of a given URL.
 
+    Args:
+        url (str): The URL to fetch content from.
 
-if __name__ == "__main__":
-    get_page('http://slowwly.robertomurray.co.uk')
+    Returns:
+        str: The HTML content of the URL.
+    """
+    response = requests.get(url)
+    return response.text
